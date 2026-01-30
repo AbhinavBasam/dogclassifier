@@ -1,5 +1,24 @@
+# --- Python Basics ---
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+
+# --- Heavy Model Files (Too big for GitHub) ---
 *.keras
 *.h5
 *.zip
-__pycache__/
-.ipynb_checkpoints/
+
+# --- Privacy & Temporary Files (CRITICAL) ---
+# Ignore all validation photos and camera snaps
+*.jpg
+*.jpeg
+*.png
+*.mp4
+
+# Ignore the history folder if it was created locally
+Dog_App_History/
+Dog_Models_Backup/
+
+# System files
+.DS_Store
+Thumbs.db
