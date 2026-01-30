@@ -41,51 +41,45 @@ from tensorflow import keras
 import tensorflow_datasets as tfds
 import numpy as np
 import matplotlib.pyplot as plt
-from tensorflow.keras.preprocessing import image
 import tkinter as tk
-from tkinter import filedialog
+from tkinter import filedialog, Label, Button, Frame
+from PIL import Image, ImageTk
 import cv2
 import os
+import shutil
 import urllib.request
+from datetime import datetime
 
 # ==========================================
-# 🛑 CONFIGURATION: UPDATE THIS PATH!
+# 🛑 CONFIGURATION
 # ==========================================
-# Point this to the folder where you unzipped your models.
-# Windows Example: r"C:\Users\John\Downloads\Dog_Models_Backup"
+# 1. Path to your downloaded models
 MODEL_FOLDER = r"C:\Users\YourName\Downloads\Dog_Models_Backup"
+
+# 2. Path to store saved images (Change to empty string "" to disable saving)
+HISTORY_FOLDER = r"C:\Users\YourName\Pictures\Dog_App_History"
 # ==========================================
 
-print(f"🚀 Starting Dog App...")
-print(f"📂 Looking for models in: {MODEL_FOLDER}")
+# --- SETUP ---
+if HISTORY_FOLDER and not os.path.exists(HISTORY_FOLDER):
+    os.makedirs(HISTORY_FOLDER)
 
-# --- 1. ROBUST DOWNLOAD (OpenCV Tools) ---
+# Download OpenCV Tools
 files_needed = {
     "MobileNetSSD_deploy.prototxt.txt": "https://raw.githubusercontent.com/djmv/MobilNet_SSD_opencv/master/MobileNetSSD_deploy.prototxt",
     "MobileNetSSD_deploy.caffemodel": "https://raw.githubusercontent.com/djmv/MobilNet_SSD_opencv/master/MobileNetSSD_deploy.caffemodel"
 }
-
-print("Checking OpenCV files...")
 for fname, url in files_needed.items():
-    if os.path.exists(fname) and os.path.getsize(fname) < 2000:
-        os.remove(fname) # Delete if broken
-
     if not os.path.exists(fname):
-        print(f"⬇️ Downloading {fname}...")
-        try:
-            urllib.request.urlretrieve(url, fname)
-        except Exception as e:
-            print(f"❌ Download failed: {e}")
+        try: urllib.request.urlretrieve(url, fname)
+        except: pass
 
 try:
     net = cv2.dnn.readNetFromCaffe("MobileNetSSD_deploy.prototxt.txt", "MobileNetSSD_deploy.caffemodel")
-    print("✅ OpenCV Object Detector Ready!")
 except:
-    print("⚠️ OpenCV Failed. Smart Crop disabled.")
     net = None
 
-# --- 2. LOAD MODELS FROM FOLDER ---
-print("⏳ Loading AI Models (This may take a moment)...")
+# Load Models
 try:
     models = {
         'resnet50': keras.models.load_model(os.path.join(MODEL_FOLDER, "resnet50_dogs.keras")),
@@ -93,111 +87,183 @@ try:
         'mobilenetv2': keras.models.load_model(os.path.join(MODEL_FOLDER, "mobilenetv2_dogs.keras"))
     }
     mlp = keras.models.load_model(os.path.join(MODEL_FOLDER, "mlp_ensemble.keras"))
-    print("✅ All Models Loaded Successfully!")
-except OSError as e:
-    print(f"\n❌ CRITICAL ERROR: Could not find models.")
-    print(f"Checked path: {MODEL_FOLDER}")
-    print("👉 Please edit the 'MODEL_FOLDER' line in the script to match your unzipped folder location.")
+except Exception as e:
+    print(f"Error loading models: {e}")
     exit()
 
-# --- 3. BREED DATA ---
+# Breed Info
 breed_info = {
-    'american_bulldog': {'life': '10-12 years', 'traits': 'Confident, Social, Active'},
-    'american_pit_bull_terrier': {'life': '8-15 years', 'traits': 'Loyal, Courageous, Friendly'},
-    'basset_hound': {'life': '12-13 years', 'traits': 'Patient, Low-energy, Charming'},
-    'beagle': {'life': '10-15 years', 'traits': 'Curious, Merry, Friendly'},
-    'boxer': {'life': '10-12 years', 'traits': 'Bright, Fun-loving, Active'},
-    'chihuahua': {'life': '14-16 years', 'traits': 'Charming, Graceful, Sassy'},
-    'english_cocker_spaniel': {'life': '12-14 years', 'traits': 'Merry, Responsive, Gentle'},
-    'english_setter': {'life': '12 years', 'traits': 'Friendly, Mellow, Merry'},
-    'german_shorthaired': {'life': '10-12 years', 'traits': 'Friendly, Smart, Willing to Please'},
-    'great_pyrenees': {'life': '10-12 years', 'traits': 'Smart, Patient, Calm'},
-    'havanese': {'life': '14-16 years', 'traits': 'Funny, Intelligent, Outgoing'},
-    'japanese_chin': {'life': '10-12 years', 'traits': 'Charming, Noble, Loving'},
-    'keeshond': {'life': '12-15 years', 'traits': 'Friendly, Lively, Outgoing'},
-    'leonberger': {'life': '7 years', 'traits': 'Gentle, Friendly, Playful'},
-    'miniature_pinscher': {'life': '12-16 years', 'traits': 'Fearless, Spirited, Proud'},
-    'newfoundland': {'life': '9-10 years', 'traits': 'Sweet, Patient, Devoted'},
-    'pomeranian': {'life': '12-16 years', 'traits': 'Lively, Bold, Inquisitive'},
-    'pug': {'life': '13-15 years', 'traits': 'Loving, Charming, Mischievous'},
-    'saint_bernard': {'life': '8-10 years', 'traits': 'Playful, Charming, Inquisitive'},
-    'samoyed': {'life': '12-14 years', 'traits': 'Adaptable, Friendly, Gentle'},
-    'scottish_terrier': {'life': '12 years', 'traits': 'Independent, Confident, Spirited'},
-    'shiba_inu': {'life': '13-16 years', 'traits': 'Alert, Active, Attentive'},
-    'staffordshire_bull_terrier': {'life': '12-14 years', 'traits': 'Clever, Brave, Tenacious'},
-    'wheaten_terrier': {'life': '12-14 years', 'traits': 'Happy, Steady, Self-Confident'},
-    'yorkshire_terrier': {'life': '11-15 years', 'traits': 'Sprightly, Tomboyish, Affectionate'}
+    'american_bulldog': {'life': '10-12 yrs', 'traits': 'Confident, Social, Active'},
+    'american_pit_bull_terrier': {'life': '8-15 yrs', 'traits': 'Loyal, Courageous, Friendly'},
+    'basset_hound': {'life': '12-13 yrs', 'traits': 'Patient, Low-energy, Charming'},
+    'beagle': {'life': '10-15 yrs', 'traits': 'Curious, Merry, Friendly'},
+    'boxer': {'life': '10-12 yrs', 'traits': 'Bright, Fun-loving, Active'},
+    'chihuahua': {'life': '14-16 yrs', 'traits': 'Charming, Graceful, Sassy'},
+    'english_cocker_spaniel': {'life': '12-14 yrs', 'traits': 'Merry, Responsive, Gentle'},
+    'english_setter': {'life': '12 yrs', 'traits': 'Friendly, Mellow, Merry'},
+    'german_shorthaired': {'life': '10-12 yrs', 'traits': 'Friendly, Smart, Willing'},
+    'great_pyrenees': {'life': '10-12 yrs', 'traits': 'Smart, Patient, Calm'},
+    'havanese': {'life': '14-16 yrs', 'traits': 'Funny, Intelligent, Outgoing'},
+    'japanese_chin': {'life': '10-12 yrs', 'traits': 'Charming, Noble, Loving'},
+    'keeshond': {'life': '12-15 yrs', 'traits': 'Friendly, Lively, Outgoing'},
+    'leonberger': {'life': '7 yrs', 'traits': 'Gentle, Friendly, Playful'},
+    'miniature_pinscher': {'life': '12-16 yrs', 'traits': 'Fearless, Spirited, Proud'},
+    'newfoundland': {'life': '9-10 yrs', 'traits': 'Sweet, Patient, Devoted'},
+    'pomeranian': {'life': '12-16 yrs', 'traits': 'Lively, Bold, Inquisitive'},
+    'pug': {'life': '13-15 yrs', 'traits': 'Loving, Charming, Mischievous'},
+    'saint_bernard': {'life': '8-10 yrs', 'traits': 'Playful, Charming, Inquisitive'},
+    'samoyed': {'life': '12-14 yrs', 'traits': 'Adaptable, Friendly, Gentle'},
+    'scottish_terrier': {'life': '12 yrs', 'traits': 'Independent, Confident, Spirited'},
+    'shiba_inu': {'life': '13-16 yrs', 'traits': 'Alert, Active, Attentive'},
+    'staffordshire_bull_terrier': {'life': '12-14 yrs', 'traits': 'Clever, Brave, Tenacious'},
+    'wheaten_terrier': {'life': '12-14 yrs', 'traits': 'Happy, Steady, Confident'},
+    'yorkshire_terrier': {'life': '11-15 yrs', 'traits': 'Sprightly, Tomboyish, Loving'}
 }
 
-# Names
-print("⏳ Fetching breed list...")
+# Fetch Names
 cat_breeds = {"Abyssinian","Bengal","Birman","Bombay","British_Shorthair","Egyptian_Mau",
               "Maine_Coon","Persian","Ragdoll","Russian_Blue","Siamese","Sphynx"}
 info = tfds.builder("oxford_iiit_pet").info
 dog_names = [n for n in info.features["label"].names if n not in cat_breeds]
 
-# --- 4. PREDICT APP ---
-def get_dog_roi(img_path):
-    img = cv2.imread(img_path)
-    if img is None: return None, False
-    if net is None: return cv2.cvtColor(img, cv2.COLOR_BGR2RGB), False
+# --- LOGIC ---
+def save_image_securely(img_array, source="cam"):
+    """ Saves image to history folder if configured. Delete lines below to disable. """
+    if HISTORY_FOLDER:
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        filename = f"Dog_{source}_{timestamp}.jpg"
+        save_path = os.path.join(HISTORY_FOLDER, filename)
+        # Convert RGB to BGR for OpenCV saving
+        cv2.imwrite(save_path, cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR))
+        print(f"🔒 Image saved to history: {filename}")
 
+def get_dog_roi(img):
     (h, w) = img.shape[:2]
-    blob = cv2.dnn.blobFromImage(cv2.resize(img, (300, 300)), 0.007843, (300, 300), 127.5)
-    net.setInput(blob)
-    detections = net.forward()
+    if net:
+        blob = cv2.dnn.blobFromImage(cv2.resize(img, (300, 300)), 0.007843, (300, 300), 127.5)
+        net.setInput(blob)
+        detections = net.forward()
+        best_conf = 0.0
+        dog_box = None
+        for i in range(detections.shape[2]):
+            conf = detections[0, 0, i, 2]
+            if int(detections[0, 0, i, 1]) == 12 and conf > 0.2:
+                if conf > best_conf:
+                    best_conf = conf
+                    box = detections[0, 0, i, 3:7] * np.array([w, h, w, h])
+                    dog_box = box.astype("int")
+        if dog_box is not None:
+            (sx, sy, ex, ey) = dog_box
+            sx, sy = max(0, sx-20), max(0, sy-20)
+            ex, ey = min(w, ex+20), min(h, ey+20)
+            return img[sy:ey, sx:ex], True
+    return img, False
 
-    best_conf = 0.0
-    dog_box = None
-    for i in range(detections.shape[2]):
-        conf = detections[0, 0, i, 2]
-        if int(detections[0, 0, i, 1]) == 12 and conf > 0.2:
-            if conf > best_conf:
-                best_conf = conf
-                box = detections[0, 0, i, 3:7] * np.array([w, h, w, h])
-                dog_box = box.astype("int")
-    if dog_box is not None:
-        (sx, sy, ex, ey) = dog_box
-        sx, sy = max(0, sx-20), max(0, sy-20)
-        ex, ey = min(w, ex+20), min(h, ey+20)
-        return cv2.cvtColor(img[sy:ey, sx:ex], cv2.COLOR_BGR2RGB), True
-    return cv2.cvtColor(img, cv2.COLOR_BGR2RGB), False
+def process_and_predict(cv2_img, source_type):
+    # Convert to RGB
+    if len(cv2_img.shape) == 2: cv2_img = cv2.cvtColor(cv2_img, cv2.COLOR_GRAY2RGB)
+    elif cv2_img.shape[2] == 4: cv2_img = cv2.cvtColor(cv2_img, cv2.COLOR_BGRA2RGB)
+    else: cv2_img = cv2.cvtColor(cv2_img, cv2.COLOR_BGR2RGB)
 
-def run_app():
-    print("\n📸 Opening File Selector...")
-    root = tk.Tk()
-    root.withdraw()
-    filename = filedialog.askopenfilename(title="Select a Dog Image", filetypes=[("Image files", "*.jpg *.jpeg *.png")])
+    roi, cropped = get_dog_roi(cv2_img)
 
-    if filename:
-        print(f"Processing: {filename}")
-        roi, cropped = get_dog_roi(filename)
-        if roi is None:
-            print("Error: Could not read image.")
-            return
+    # 1. Save Original (Privacy Control)
+    save_image_securely(cv2_img, source_type)
 
-        img_r = cv2.resize(roi, (224, 224))
-        img_arr = np.expand_dims(img_r, axis=0) / 255.0
+    if not cropped:
+        print("⚠️ No dog detected by Smart Crop.")
 
-        p1 = models['resnet50'].predict(img_arr, verbose=0)
-        p2 = models['efficientnetb0'].predict(img_arr, verbose=0)
-        p3 = models['mobilenetv2'].predict(img_arr, verbose=0)
-        final = mlp.predict(np.concatenate([p1, p2, p3], axis=1), verbose=0)
+    # 2. Predict
+    img_r = cv2.resize(roi, (224, 224))
+    img_arr = np.expand_dims(img_r, axis=0) / 255.0
 
-        idx = np.argmax(final)
-        conf = np.max(final) * 100
-        breed = dog_names[idx]
-        info = breed_info.get(breed, {'life': 'Unknown', 'traits': 'Unknown'})
+    p1 = models['resnet50'].predict(img_arr, verbose=0)
+    p2 = models['efficientnetb0'].predict(img_arr, verbose=0)
+    p3 = models['mobilenetv2'].predict(img_arr, verbose=0)
+    final = mlp.predict(np.concatenate([p1, p2, p3], axis=1), verbose=0)[0]
 
-        plt.figure(figsize=(6,6))
-        plt.imshow(roi)
-        title = f"{breed}\n{info['life']}\n{info['traits']}" if conf > 50 else "Uncertain"
-        plt.title(title, color="green" if conf > 50 else "red")
-        plt.axis("off")
-        plt.show()
-        print("✅ Done! Check the popup window.")
-    else:
-        print("❌ No file selected.")
+    # 3. Top 3 Logic
+    top_3_indices = np.argsort(final)[-3:][::-1]
+
+    # 4. Display Result
+    plt.figure(figsize=(5, 6))
+    plt.imshow(roi)
+    plt.axis("off")
+
+    top_name = dog_names[top_3_indices[0]]
+    top_score = final[top_3_indices[0]] * 100
+    info = breed_info.get(top_name, {'life': '?', 'traits': '?'})
+
+    title = f"🏆 {top_name} ({top_score:.1f}%)\n{info['life']}"
+    plt.title(title, color="green", fontsize=12, fontweight='bold')
+
+    # Add text for other 2
+    text_str = "Top 3 Predictions:\n"
+    for i in top_3_indices:
+        text_str += f"• {dog_names[i]}: {final[i]*100:.1f}%\n"
+
+    plt.xlabel(text_str, fontsize=10)
+    plt.show()
+
+# --- GUI ---
+class DogApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("🐶 Dog Breed Classifier Pro")
+        self.root.geometry("500x400")
+
+        Label(root, text="Dog Breed Classifier", font=("Arial", 20, "bold")).pack(pady=20)
+
+        btn_frame = Frame(root)
+        btn_frame.pack(pady=20)
+
+        Button(btn_frame, text="📂 Upload Photo", command=self.upload_mode,
+               font=("Arial", 12), bg="#e1e1e1", width=15).pack(side="left", padx=10)
+
+        Button(btn_frame, text="📷 Open Camera", command=self.camera_mode,
+               font=("Arial", 12), bg="#d1e7dd", width=15).pack(side="left", padx=10)
+
+        Label(root, text="Press Spacebar to snap in camera mode", fg="gray").pack(side="bottom", pady=10)
+
+    def upload_mode(self):
+        filename = filedialog.askopenfilename()
+        if filename:
+            img = cv2.imread(filename)
+            if img is not None:
+                process_and_predict(img, "upload")
+
+    def camera_mode(self):
+        self.cam_window = tk.Toplevel(self.root)
+        self.cam_window.title("Camera - Press SPACE to Snap")
+
+        self.video_label = Label(self.cam_window)
+        self.video_label.pack()
+
+        self.cap = cv2.VideoCapture(0)
+
+        # Bind Spacebar to Snap
+        self.cam_window.bind('<space>', lambda e: self.snap())
+        self.update_cam()
+
+    def update_cam(self):
+        if self.cap and self.cap.isOpened():
+            ret, frame = self.cap.read()
+            if ret:
+                self.last_frame = frame
+                # Convert for Tkinter display
+                img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGBA))
+                imgtk = ImageTk.PhotoImage(image=img)
+                self.video_label.imgtk = imgtk
+                self.video_label.configure(image=imgtk)
+            self.cam_window.after(10, self.update_cam)
+
+    def snap(self):
+        if self.cap:
+            process_and_predict(self.last_frame, "camera")
+            self.cap.release()
+            self.cam_window.destroy()
 
 if __name__ == "__main__":
-    run_app()
+    root = tk.Tk()
+    app = DogApp(root)
+    root.mainloop()
