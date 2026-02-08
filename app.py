@@ -7,29 +7,50 @@ import cv2
 import json
 import os
 
-# --- CONFIGURATION ---
-# NOTE: When running locally, download models to a folder named 'models'
-MODEL_PATH = "models" 
+# --- 1. ROBUST MODEL LOADING ---
+def load_model_smart(filename):
+    possible_paths = [
+        f"models/{filename}",
+        filename,
+        f"/content/drive/MyDrive/Dog_Project_Stanford_V1/{filename}"
+    ]
+    for path in possible_paths:
+        if os.path.exists(path):
+            print(f"✅ Found {filename} at: {path}")
+            return keras.models.load_model(path)
+    print(f"❌ CRITICAL ERROR: Could not find {filename}")
+    return None
 
-# --- LOAD MODELS ---
-print("⏳ Loading AI Models...")
+def load_json_smart(filename):
+    possible_paths = [f"models/{filename}", filename]
+    for path in possible_paths:
+        if os.path.exists(path):
+            with open(path, 'r') as f:
+                return json.load(f)
+    return None
+
+print("⏳ Starting App...")
+
+# Load models
 try:
     models = {
-        'resnet50': keras.models.load_model(f"{MODEL_PATH}/resnet50_dogs_finetuned.keras"),
-        'efficientnetb0': keras.models.load_model(f"{MODEL_PATH}/efficientnetb0_dogs_finetuned.keras"),
-        'mobilenetv2': keras.models.load_model(f"{MODEL_PATH}/mobilenetv2_dogs_finetuned.keras")
+        'resnet50': load_model_smart("resnet50_dogs_finetuned.keras"),
+        'efficientnetb0': load_model_smart("efficientnetb0_dogs_finetuned.keras"),
+        'mobilenetv2': load_model_smart("mobilenetv2_dogs_finetuned.keras")
     }
-    mlp = keras.models.load_model(f"{MODEL_PATH}/mlp_ensemble.keras")
+    mlp = load_model_smart("mlp_ensemble.keras")
     
-    with open(f"{MODEL_PATH}/class_indices.json", 'r') as f:
-        class_indices = json.load(f)
-    class_names = {v: k for k, v in class_indices.items()}
-    print("✅ Models Loaded Successfully!")
+    class_indices = load_json_smart("class_indices.json")
+    if class_indices:
+        class_names = {v: k for k, v in class_indices.items()}
+        print(f"✅ Loaded {len(class_names)} breeds.")
+    else:
+        class_names = {}
 except Exception as e:
-    print(f"❌ Error loading models: {e}")
-    print("Please ensure you have downloaded the models into a 'models' folder.")
+    print(f"❌ Setup Error: {e}")
+    models = None
 
-# --- DATABASE (Traits + Life Span) ---
+# --- 2. DATABASE ---
 breed_db = {
     'Chihuahua': '14-16 years | Sassy, Charming, Graceful. Big personality in a tiny body.',
     'Japanese Spaniel': '10-12 years | Noble, Charming, Loving. An aristocratic lap dog.',
@@ -153,77 +174,105 @@ breed_db = {
     'African Hunting Dog': '10-12 years | Social, Intense, Wild. The Painted Wolf.'
 }
 
-# --- PREDICTION FUNCTION ---
+# --- 3. PREDICTION FUNCTION ---
 def predict_dog_final(image):
-    if image is None: return "Please upload an image.", ""
-
-    # Preprocess
-    img = np.array(image)
-    img = cv2.resize(img, (224, 224))
-    img_arr = np.expand_dims(img, axis=0)
-
-    # Predict
-    p1 = models['resnet50'].predict(img_arr, verbose=0)
-    p2 = models['efficientnetb0'].predict(img_arr, verbose=0)
-    p3 = models['mobilenetv2'].predict(img_arr, verbose=0)
+    if image is None: return {}, "Please upload an image."
+    if models is None: return {}, "⚠️ Error: Models could not be loaded."
     
-    # Ensemble Vote
-    stacked_input = np.concatenate([p1, p2, p3], axis=1)
-    final_probs = mlp.predict(stacked_input, verbose=0)[0]
-    
-    # Get Winner
-    top_index = final_probs.argmax()
-    confidence = final_probs[top_index] * 100
-    
-    # Cleaning Name
-    raw_name = class_names[top_index]
-    if '-' in raw_name:
-        breed_name = raw_name.split('-', 1)[1]
-    else:
-        breed_name = raw_name
-    breed_name = breed_name.replace('_', ' ').title()
+    try:
+        # Preprocess
+        img = np.array(image)
+        img = cv2.resize(img, (224, 224))
+        img_arr = np.expand_dims(img, axis=0)
 
-    # Database Lookup
-    info_found = "Details not found."
-    lifespan = "Unknown"
-    personality = "Unknown"
-    search_key = breed_name.replace(" ", "").lower()
+        # Predict
+        p1 = models['resnet50'].predict(img_arr, verbose=0)
+        p2 = models['efficientnetb0'].predict(img_arr, verbose=0)
+        p3 = models['mobilenetv2'].predict(img_arr, verbose=0)
+        
+        # Ensemble Vote
+        stacked_input = np.concatenate([p1, p2, p3], axis=1)
+        final_probs = mlp.predict(stacked_input, verbose=0)[0]
+        
+        # --- GET TOP 3 RESULTS ---
+        # Sort indices by probability (descending) and take top 3
+        top_indices = final_probs.argsort()[-3:][::-1]
+        
+        # Create dictionary for Gradio Label
+        top_confidences = {}
+        for idx in top_indices:
+            raw_name = class_names[idx]
+            # Clean name logic
+            if raw_name.startswith('n') and '-' in raw_name:
+                 clean_name = raw_name.split('-', 1)[1]
+            else:
+                clean_name = raw_name
+            clean_name = clean_name.replace('_', ' ').replace('-', ' ').title()
+            top_confidences[clean_name] = float(final_probs[idx])
+
+        # Get Winner Info
+        winner_name = list(top_confidences.keys())[0]
+        winner_conf = list(top_confidences.values())[0] * 100
+
+        # Database Lookup (Fuzzy Search for Winner)
+        lifespan = "Unknown"
+        personality = "Unknown"
+        search_key = winner_name.replace(" ", "").lower()
+        
+        found = False
+        for db_key, db_val in breed_db.items():
+            db_clean = db_key.replace(" ", "").lower()
+            if db_clean in search_key or search_key in db_clean:
+                winner_name = db_key 
+                parts = db_val.split('|')
+                lifespan = parts[0].strip()
+                personality = parts[1].strip()
+                found = True
+                break
+        
+        if not found:
+            personality = "Traits not found in database."
+
+        # Uncertainty Check
+        if winner_conf < 50.0:
+            return top_confidences, f"⚠️ UNCERTAIN ({winner_conf:.1f}%)\n\nI'm not sure, but it looks a little like a {winner_name}."
+
+        # Success Output
+        info_text = (
+            f"✅ MATCH FOUND!\n\n"
+            f"🐕 Breed: {winner_name}\n"
+            f"📊 Confidence: {winner_conf:.1f}%\n"
+            f"⏳ Life Span: {lifespan}\n"
+            f"📝 Personality: {personality}"
+        )
+        
+        return top_confidences, info_text
+
+    except Exception as e:
+        return {}, f"Processing Error: {str(e)}"
+
+# --- 4. UI ---
+with gr.Blocks(theme=gr.themes.Soft()) as app:
+    gr.Markdown("# 🐶 Ultimate Dog Breed Classifier")
+    gr.Markdown("Identify 120 breeds with detailed personality and lifespan analysis.")
     
-    for db_key, db_val in breed_db.items():
-        if db_key.replace(" ", "").lower() in search_key or search_key in db_key.replace(" ", "").lower():
-            breed_name = db_key
-            parts = db_val.split('|')
-            lifespan = parts[0].strip()
-            personality = parts[1].strip()
-            break
+    with gr.Tabs():
+        with gr.TabItem("📁 Upload Image"):
+            img_input = gr.Image(type="numpy", label="Upload Photo")
+            btn_upload = gr.Button("Analyze Upload", variant="primary")
+        
+        with gr.TabItem("📷 Use Camera"):
+            cam_input = gr.Image(sources=["webcam"], type="numpy", label="Take Photo")
+            btn_cam = gr.Button("Analyze Camera", variant="primary")
+            
+    # Outputs
+    # num_top_classes=3 tells Gradio to show the top 3 bars from our dictionary
+    out_label = gr.Label(num_top_classes=3, label="Top Predictions")
+    out_text = gr.Textbox(label="Detailed Analysis", lines=5)
 
-    # Uncertainty Check
-    if confidence < 50.0:
-        return {breed_name: confidence / 100}, f"⚠️ UNCERTAIN ({confidence:.1f}%)\n\nI'm not sure, but it looks a little like a {breed_name}."
-
-    # Success Output
-    info_text = (
-        f"✅ MATCH FOUND!\n\n"
-        f"🐕 Breed: {breed_name}\n"
-        f"📊 Confidence: {confidence:.1f}%\n"
-        f"⏳ Life Span: {lifespan}\n"
-        f"📝 Personality: {personality}"
-    )
-    
-    return {breed_name: confidence / 100}, info_text
-
-# --- GRADIO INTERFACE ---
-interface = gr.Interface(
-    fn=predict_dog_final,
-    inputs=gr.Image(sources=["upload", "webcam"], type="numpy", label="Upload or Snap"),
-    outputs=[
-        gr.Label(num_top_classes=3, label="Top Predictions"), 
-        gr.Textbox(label="AI Analysis", lines=6)
-    ],
-    title="🐶 Ultimate Dog Classifier (120 Breeds)",
-    description="Identifies 120 breeds with Lifespan & Personality.",
-    theme="default"
-)
+    # Actions
+    btn_upload.click(predict_dog_final, inputs=img_input, outputs=[out_label, out_text])
+    btn_cam.click(predict_dog_final, inputs=cam_input, outputs=[out_label, out_text])
 
 if __name__ == "__main__":
-    interface.launch()
+    app.launch()
