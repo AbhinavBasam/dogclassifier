@@ -1,62 +1,38 @@
-# Enhanced Dog Breed Classification using Stacked Ensemble Deep Learning
 
-![License](https://img.shields.io/badge/license-MIT-blue) ![Python](https://img.shields.io/badge/python-3.8%2B-blue) ![TensorFlow](https://img.shields.io/badge/framework-TensorFlow-orange)
+# Fine-Grained Dog Breed Classification using Ensemble Transfer Learning
 
-## Abstract
-Fine-grained image classification presents a significant challenge in computer vision due to high inter-class similarity and background noise. This project implements a **Hybrid Inference Pipeline** that integrates an object detection module (MobileNet-SSD) for background clutter mitigation with a **Stacked Ensemble of Convolutional Neural Networks (CNNs)** for classification.
+![Project Status](https://img.shields.io/badge/Status-Completed-green)
+![Framework](https://img.shields.io/badge/Framework-TensorFlow%20%7C%20Keras-orange)
+![License](https://img.shields.io/badge/License-MIT-blue)
 
-The system features a **Dual-Mode Inference Engine** capable of processing both static image uploads and real-time webcam feeds. By aggregating feature maps from ResNet50, EfficientNetB0, and MobileNetV2, the model achieves superior generalization performance (>90% accuracy) and provides a probabilistic breakdown of the top-3 predicted breeds.
+## 📄 Abstract
+Fine-grained image classification remains a significant challenge in computer vision due to low inter-class variance and high intra-class variance. This project presents a robust deep learning framework for identifying **120 distinct dog breeds** using the Stanford Dogs Dataset. The proposed architecture employs an **Ensemble Stacking Strategy**, integrating three state-of-the-art Convolutional Neural Networks (CNNs)—**ResNet50, EfficientNetB0, and MobileNetV2**—as base learners. Their predictions are fused by a meta-learner (Multi-Layer Perceptron) to optimize classification accuracy. The system includes a post-processing knowledge base that retrieves biological traits (lifespan, temperament) and estimates prediction uncertainty.
 
-## System Architecture
-The solution follows a multi-stage pipeline:
+## 1. Introduction
+Dog breed identification is a classic fine-grained visual categorization (FGVC) problem. Distinguishing between breeds such as the *Norfolk Terrier* and *Norwich Terrier* requires capturing subtle discriminative features (e.g., ear shape, snout structure) while remaining invariant to pose, background, and lighting.
 
-1.  **Input Processing:**
-    * **Static Mode:** Accepts standard image formats (JPG, PNG).
-    * **Real-Time Mode:** JavaScript bridge (Cloud) or OpenCV integration (Local) captures live video frames.
-2.  **Object Detection (Smart Crop):** An OpenCV DNN module (MobileNet-SSD) identifies the subject's bounding box and crops the Region of Interest (ROI), eliminating environmental noise.
-3.  **Ensemble Classification:** The ROI is processed by three transfer-learning models:
-    * **ResNet50:** Deep residual learning for semantic feature capture.
-    * **EfficientNetB0:** Compound scaling for balanced accuracy/efficiency.
-    * **MobileNetV2:** Lightweight architecture for rapid inference.
-4.  **Meta-Learning:** A Logistic Regression meta-learner aggregates the probability vectors to output the final classification.
+This repository contains the implementation of a **Multi-Model Ensemble Classifier** that leverages Transfer Learning to overcome data scarcity and computational constraints. The final application is deployed via a Gradio web interface, offering real-time inference and biological metadata retrieval.
 
-## Repository Structure
+## 2. Methodology
 
-| File Name | Description |
-| :--- | :--- |
-| `dogcnndrive.ipynb` | **Training Pipeline:** Implements data augmentation, transfer learning, and the stacking ensemble strategy. Includes automated model checkpointing and early stopping. |
-| `demo_notebook.ipynb` | **Cloud Inference:** A Google Colab-optimized notebook featuring a JavaScript-based webcam bridge and Google Drive integration for prediction history logging. |
-| `app.py` | **Desktop Application:** A standalone GUI application built with Tkinter. Features real-time camera capture, Top-3 probability visualization, and privacy-aware local storage. |
-| `requirements.txt` | **Dependencies:** List of required Python libraries. |
+### 2.1 Dataset
+The model was trained on the **Stanford Dogs Dataset** [1], comprising 20,580 images across 120 classes.
+* **Preprocessing:** Images were resized to $224 \times 224$ pixels.
+* **Augmentation:** To prevent overfitting, the training pipeline included random rotations ($\pm 20^\circ$), width/height shifts (0.2), and horizontal flips.
 
-## Getting Started
+### 2.2 Model Architecture
+We utilized a **Stacking Ensemble** approach:
+1.  **Base Learners (Level-0 Models):**
+    * **ResNet50:** Utilizes residual connections to solve the vanishing gradient problem in deep networks.
+    * **EfficientNetB0:** Optimizes depth, width, and resolution using a compound scaling coefficient.
+    * **MobileNetV2:** Uses inverted residuals and linear bottlenecks for efficient low-latency inference.
+    * *Note:* All base learners were pre-trained on ImageNet and fine-tuned on the target dataset.
 
-### Prerequisites
-* Python 3.8+
-* Git
-* Webcam (optional, for real-time features)
+2.  **Meta-Learner (Level-1 Model):**
+    * The Softmax output vectors from the three base learners are concatenated to form a feature vector of size $120 \times 3 = 360$.
+    * A dense neural network (MLP) processes this vector to learn the optimal weighting for each expert model, producing the final probability distribution.
 
-### Installation
+### 2.3 Inference Pipeline
+The inference system includes an **Uncertainty Filter**. If the maximum confidence score $C_{max} < 0.5$ (50%), the prediction is flagged as "Uncertain," mitigating false positives in out-of-distribution samples.
 
-1.  **Clone the Repository**
-    ```bash
-    git clone [https://github.com/AbhinavBasam/dogclassifier.git](https://github.com/AbhinavBasam/dogclassifier.git)
-    cd dogclassifier
-    ```
-
-2.  **Download Trained Models**
-    The model weights are hosted externally due to size constraints.
-    * **Download Link:** [INSERT YOUR GOOGLE DRIVE LINK HERE]
-    * **Action:** Extract the contents into a folder named `Dog_Models_Backup` in the project root.
-
-3.  **Install Dependencies**
-    ```bash
-    pip install -r requirements.txt
-    ```
-
-### Usage
-
-**Option 1: Local Desktop App**
-Run the application to launch the Graphical User Interface:
-```bash
-python app.py
+## 3. Directory Structure

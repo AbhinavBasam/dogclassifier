@@ -1,6 +1,5 @@
 tensorflow
-opencv-python
-matplotlib
-tensorflow-datasets
 numpy
-Pillow
+opencv-python-headless
+pillow
+gradio
