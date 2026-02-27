@@ -8,31 +8,38 @@
 ## 📄 Abstract
 Fine-grained image classification remains a significant challenge in computer vision due to low inter-class variance and high intra-class variance. This project presents a robust deep learning framework for identifying **120 distinct dog breeds** using the Stanford Dogs Dataset. The proposed architecture employs an **Ensemble Stacking Strategy**, integrating three state-of-the-art Convolutional Neural Networks (CNNs)—**ResNet50, EfficientNetB0, and MobileNetV2**—as base learners. Their predictions are fused by a meta-learner (Multi-Layer Perceptron) to optimize classification accuracy. The system includes a post-processing knowledge base that retrieves biological traits (lifespan, temperament) and estimates prediction uncertainty.
 
-## 1. Introduction
-Dog breed identification is a classic fine-grained visual categorization (FGVC) problem. Distinguishing between breeds such as the *Norfolk Terrier* and *Norwich Terrier* requires capturing subtle discriminative features (e.g., ear shape, snout structure) while remaining invariant to pose, background, and lighting.
+# 🐶 Large-Scale Dog Breed Classification via Stacked Ensemble Deep Learning
 
-This repository contains the implementation of a **Multi-Model Ensemble Classifier** that leverages Transfer Learning to overcome data scarcity and computational constraints. The final application is deployed via a Gradio web interface, offering real-time inference and biological metadata retrieval.
+**Author:** Abhinav Basam  
+**Institution:** B. V. Raju Institute of Technology, Department of Computer Science and Engineering (AI & ML)  
+**Dataset:** Stanford Dogs Dataset (120 Breeds, ~20,000 images)
 
-## 2. Methodology
+## 📌 Project Overview
+Classifying dog breeds is a notoriously difficult fine-grained image classification task due to high intra-class variation (different poses/colors) and low inter-class variation (breeds that look almost identical). This project implements a **Stacked Generalization (Ensemble) Architecture** to achieve high-accuracy classification across 120 unique breeds.
 
-### 2.1 Dataset
-The model was trained on the **Stanford Dogs Dataset** [1], comprising 20,580 images across 120 classes.
-* **Preprocessing:** Images were resized to $224 \times 224$ pixels.
-* **Augmentation:** To prevent overfitting, the training pipeline included random rotations ($\pm 20^\circ$), width/height shifts (0.2), and horizontal flips.
+## 🧠 Model Architecture
+This project utilizes a two-tier ensemble approach to maximize feature extraction and classification accuracy:
+1. **Tier 1 (Base/Student Models):** Three state-of-the-art Convolutional Neural Networks (CNNs) independently extract features and generate probability distributions.
+   * **ResNet50** * **EfficientNetB0** * **MobileNetV2** 2. **Tier 2 (Meta-Learner/Manager):** A Multi-Layer Perceptron (MLP) learns to optimally combine the predictions of the three base models, effectively weighting their "opinions" to produce a final verdict.
 
-### 2.2 Model Architecture
-We utilized a **Stacking Ensemble** approach:
-1.  **Base Learners (Level-0 Models):**
-    * **ResNet50:** Utilizes residual connections to solve the vanishing gradient problem in deep networks.
-    * **EfficientNetB0:** Optimizes depth, width, and resolution using a compound scaling coefficient.
-    * **MobileNetV2:** Uses inverted residuals and linear bottlenecks for efficient low-latency inference.
-    * *Note:* All base learners were pre-trained on ImageNet and fine-tuned on the target dataset.
+## 📊 Performance Metrics (Test Set)
+The Stacked Ensemble successfully outperforms all individual base models, demonstrating the power of collaborative network predictions.
 
-2.  **Meta-Learner (Level-1 Model):**
-    * The Softmax output vectors from the three base learners are concatenated to form a feature vector of size $120 \times 3 = 360$.
-    * A dense neural network (MLP) processes this vector to learn the optimal weighting for each expert model, producing the final probability distribution.
+| Model | Top-1 Accuracy | Precision | F1-Score | PR-AUC |
+| :--- | :--- | :--- | :--- | :--- |
+| ResNet50 | 72.83% | 75.08% | 72.38% | 0.8111 |
+| MobileNetV2 | 77.57% | 79.14% | 77.07% | 0.8609 |
+| EfficientNetB0 | 83.28% | 84.21% | 83.01% | 0.8981 |
+| **Proposed Ensemble** | **84.30%** | **85.40%** | **84.25%** | **0.9015** |
 
-### 2.3 Inference Pipeline
-The inference system includes an **Uncertainty Filter**. If the maximum confidence score $C_{max} < 0.5$ (50%), the prediction is flagged as "Uncertain," mitigating false positives in out-of-distribution samples.
+## 🚀 Live Demo Interface
+The project includes a fully functional, interactive web application built with **Gradio**. 
+* **Features:** Upload or capture an image to receive the top 3 predicted breeds, confidence scores, estimated lifespan, and breed personality traits.
+* **Inference:** Runs in real-time by loading pre-trained weights from Google Drive without requiring model retraining.
 
-## 3. Directory Structure
+## 🛠️ Technologies Used
+* Python 3
+* TensorFlow / Keras (Model building, training, and inference)
+* Scikit-Learn (Evaluation metrics and PR-AUC calculations)
+* Gradio (Web UI deployment)
+* Matplotlib / Seaborn (Data visualization and Confusion Matrices)
